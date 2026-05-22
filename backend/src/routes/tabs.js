@@ -1,14 +1,11 @@
 import { Router } from 'express';
-import { readDb } from '../data/store.js';
+import { getTabs } from '../db/index.js';
 
 const router = Router();
 
 router.get('/', async (_req, res) => {
-  const db = await readDb();
-  const tabs = db.tabs
-    .filter((t) => t.visible)
-    .sort((a, b) => a.order - b.order);
-  res.json(tabs);
+  const tabs = await getTabs();
+  res.json(tabs.filter((t) => t.visible));
 });
 
 export default router;

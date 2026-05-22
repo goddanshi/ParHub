@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { readDb } from '../data/store.js';
+import { getOrdersByUser, getAvailableTickets } from '../db/index.js';
 import { telegramAuth } from '../middleware/telegramAuth.js';
 
 const router = Router();
@@ -7,9 +7,11 @@ const router = Router();
 router.get('/me', telegramAuth, async (req, res) => {
   const user = req.telegramUser;
   const userId = String(user.id);
-  const db = await readDb();
-  const orders = db.orders.filter((o) => o.userId === userId);
-  const tickets = (db.spinTickets[userId] || []).filter((t) => !t.used);
+
+  const [orders, tickets] = await Promise.all([
+    getOrdersByUser(userId),
+    getAvailableTickets(userId),
+  ]);
 
   res.json({
     id: user.id,

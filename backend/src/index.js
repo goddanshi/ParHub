@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { readDb } from './data/store.js';
+import { initDb } from './db/init.js';
 import authRoutes from './routes/auth.js';
 import tabsRoutes from './routes/tabs.js';
 import categoriesRoutes from './routes/categories.js';
@@ -17,9 +17,7 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok' });
-});
+app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/tabs', tabsRoutes);
@@ -30,9 +28,16 @@ app.use('/api/wheel', wheelRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Init DB on startup
-readDb().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+app.use((err, _req, res, _next) => {
+  console.error(err.message);
+  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
+
+initDb()
+  .then(() => {
+    app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+  })
+  .catch((err) => {
+    console.error('Failed to initialize database:', err.message);
+    process.exit(1);
+  });
