@@ -1,9 +1,11 @@
 <script setup>
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { useWheelStore } from '@/stores/wheel';
 import { useTelegram } from '@/composables/useTelegram';
 import FortuneWheel from '@/components/wheel/FortuneWheel.vue';
 
+const router = useRouter();
 const wheelStore = useWheelStore();
 const { haptic } = useTelegram();
 
@@ -45,7 +47,7 @@ function onSpinEnd() {
   <div class="page">
     <div class="page-content wheel-page">
       <div class="wheel-header">
-        <h1 class="wheel-title">Колесо фортуны</h1>
+        <h1 class="wheel-title">Рулетка</h1>
         <p class="wheel-subtitle">
           При покупке от {{ (wheelStore.config?.minPurchaseAmount || 10000).toLocaleString('ru-RU') }} ₽
           вы получаете билет на прокрутку
@@ -70,7 +72,14 @@ function onSpinEnd() {
         :disabled="wheelStore.tickets < 1 || wheelStore.spinning"
         @click="handleSpin"
       >
-        {{ wheelStore.spinning ? 'Крутим...' : wheelStore.tickets < 1 ? 'Нет билетов' : 'Крутить колесо!' }}
+        {{ wheelStore.spinning ? 'Крутим...' : wheelStore.tickets < 1 ? 'Нет билетов' : 'Крутить рулетку!' }}
+      </button>
+
+      <button
+        class="btn btn--ghost btn--block wheel-prizes-btn"
+        @click="router.push('/prizes')"
+      >
+        🎁 Мои призы
       </button>
 
       <transition name="fade">
@@ -109,6 +118,7 @@ function onSpinEnd() {
 <style scoped>
 .wheel-page {
   padding-top: 8px;
+  overflow-x: hidden;
 }
 
 .wheel-header {
@@ -152,7 +162,13 @@ function onSpinEnd() {
 }
 
 .wheel-spin-btn {
-  margin: 16px;
+  margin: 16px 16px 8px;
+  width: calc(100% - 32px);
+}
+
+.wheel-prizes-btn {
+  margin: 0 16px 16px;
+  width: calc(100% - 32px);
 }
 
 .wheel-result {

@@ -135,7 +135,7 @@ loadData();
 <template>
   <div class="wheel-admin">
     <div class="admin-page-header">
-      <h1 class="admin-page-title">Колесо фортуны</h1>
+      <h1 class="admin-page-title">Рулетка</h1>
     </div>
 
     <div v-if="loading" class="admin-card">
@@ -157,7 +157,7 @@ loadData();
         <h3 class="wheel-section-title">Настройки</h3>
         <label class="wheel-checkbox">
           <input v-model="wheel.enabled" type="checkbox" />
-          Колесо включено
+          Рулетка включена
         </label>
         <div class="admin-form-group">
           <label>Мин. сумма покупки для билета (₽)</label>
@@ -167,7 +167,7 @@ loadData();
       </div>
 
       <div class="admin-page-header" style="margin-top: 8px">
-        <h2 class="wheel-section-title">Призы на колесе ({{ wheel.prizes?.length || 0 }})</h2>
+        <h2 class="wheel-section-title">Призы рулетки ({{ wheel.prizes?.length || 0 }})</h2>
         <div class="admin-actions">
           <button class="admin-btn admin-btn--primary" @click="openCreate">+ Приз</button>
           <button class="admin-btn admin-btn--ghost" @click="saveAllPrizes">Сохранить %</button>

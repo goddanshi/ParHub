@@ -39,6 +39,7 @@ export async function apiFetch(path, options = {}) {
 export const api = {
   auth: {
     verify: () => apiFetch('/auth/verify', { method: 'POST' }),
+    subscribe: () => apiFetch('/auth/subscribe', { method: 'POST' }),
   },
   tabs: {
     list: () => apiFetch('/tabs'),
@@ -62,6 +63,7 @@ export const api = {
     config: () => apiFetch('/wheel/config'),
     tickets: () => apiFetch('/wheel/tickets'),
     spin: () => apiFetch('/wheel/spin', { method: 'POST' }),
+    prizes: () => apiFetch('/wheel/prizes'),
   },
   orders: {
     checkout: (items) =>
@@ -93,6 +95,30 @@ export const api = {
       create: (data) => apiFetch('/admin/products', { method: 'POST', body: JSON.stringify(data) }),
       update: (id, data) => apiFetch(`/admin/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
       delete: (id) => apiFetch(`/admin/products/${id}`, { method: 'DELETE' }),
+    },
+    sync: {
+      status: () => apiFetch('/admin/sync/status'),
+      run: () => apiFetch('/admin/sync/run', { method: 'POST' }),
+    },
+    orders: {
+      list: () => apiFetch('/admin/orders'),
+      setStatus: (id, status) => apiFetch(`/admin/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+      delete: (id) => apiFetch(`/admin/orders/${id}`, { method: 'DELETE' }),
+      sendToMs: (id) => apiFetch(`/admin/orders/${id}/send-to-ms`, { method: 'POST' }),
+    },
+    users: {
+      list: () => apiFetch('/admin/users'),
+      grantTicket: (id, count = 1) => apiFetch(`/admin/users/${id}/grant-ticket`, { method: 'POST', body: JSON.stringify({ count }) }),
+    },
+    levels: {
+      list: () => apiFetch('/admin/levels'),
+      create: (data) => apiFetch('/admin/levels', { method: 'POST', body: JSON.stringify(data) }),
+      update: (id, data) => apiFetch(`/admin/levels/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+      delete: (id) => apiFetch(`/admin/levels/${id}`, { method: 'DELETE' }),
+    },
+    broadcast: {
+      usersCount: () => apiFetch('/admin/broadcast/users-count'),
+      send: (data) => apiFetch('/admin/broadcast', { method: 'POST', body: JSON.stringify(data) }),
     },
     wheel: {
       get: () => apiFetch('/admin/wheel'),

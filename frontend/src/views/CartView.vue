@@ -50,7 +50,14 @@ async function checkout() {
             <p class="cart-item__price">{{ formatPrice(item.price) }}</p>
             <div class="cart-item__qty">
               <button @click="cart.setQuantity(item.productId, item.quantity - 1)">−</button>
-              <span>{{ item.quantity }}</span>
+              <input
+                type="number"
+                min="1"
+                :value="item.quantity"
+                class="cart-item__qty-input"
+                @change="cart.setQuantity(item.productId, Math.max(1, parseInt($event.target.value) || 1))"
+                @focus="$event.target.select()"
+              />
               <button @click="cart.setQuantity(item.productId, item.quantity + 1)">+</button>
             </div>
           </div>
@@ -67,7 +74,7 @@ async function checkout() {
         <span class="cart-footer__price">{{ formatPrice(cart.total) }}</span>
       </div>
       <p v-if="cart.total >= (wheelStore.config?.minPurchaseAmount || 10000)" class="cart-footer__hint">
-        🎉 Вы получите билет на колесо!
+        🎉 Вы получите билет на рулетку!
       </p>
       <button class="btn btn--primary btn--block" :disabled="cart.loading" @click="checkout">
         {{ cart.loading ? 'Оформление...' : 'Оформить заказ' }}
@@ -129,12 +136,31 @@ async function checkout() {
 }
 
 .cart-item__qty button {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   background: var(--bg-elevated);
   border-radius: var(--radius-sm);
   font-size: 16px;
   font-weight: 700;
+  flex-shrink: 0;
+}
+
+.cart-item__qty-input {
+  width: 52px;
+  height: 32px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.cart-item__qty-input::-webkit-inner-spin-button,
+.cart-item__qty-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
 }
 
 .cart-item__remove {

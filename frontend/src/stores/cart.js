@@ -1,11 +1,22 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { api } from '@/api/client';
 
+const CART_KEY = 'parhub_cart';
+
+function loadCart() {
+  try { return JSON.parse(localStorage.getItem(CART_KEY)) || []; }
+  catch { return []; }
+}
+
 export const useCartStore = defineStore('cart', () => {
-  const items = ref([]);
+  const items = ref(loadCart());
   const loading = ref(false);
   const lastOrder = ref(null);
+
+  watch(items, (val) => {
+    localStorage.setItem(CART_KEY, JSON.stringify(val));
+  }, { deep: true });
 
   const total = computed(() =>
     items.value.reduce((sum, i) => sum + i.price * i.quantity, 0)

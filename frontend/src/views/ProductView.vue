@@ -14,6 +14,7 @@ const { loading, error, run } = useAbortableLoad();
 const product = ref(null);
 const activeImage = ref(0);
 const added = ref(false);
+const qty = ref(1);
 
 const gallery = computed(() => {
   if (!product.value) return [];
@@ -34,10 +35,14 @@ function badgeClass(badge) {
 
 function addToCart() {
   if (!product.value?.inStock) return;
-  cart.add(product.value);
+  cart.add(product.value, qty.value);
   added.value = true;
   haptic('medium');
   setTimeout(() => { added.value = false; }, 2000);
+}
+
+function setQty(val) {
+  qty.value = Math.max(1, parseInt(val) || 1);
 }
 
 function fetchProduct() {
@@ -150,6 +155,18 @@ watch(() => route.params.id, fetchProduct, { immediate: true });
       </div>
 
       <div class="product-actions">
+        <div v-if="product.inStock" class="product-qty">
+          <button class="product-qty__btn" @click="setQty(qty - 1)">−</button>
+          <input
+            type="number"
+            min="1"
+            :value="qty"
+            class="product-qty__input"
+            @change="setQty($event.target.value)"
+            @focus="$event.target.select()"
+          />
+          <button class="product-qty__btn" @click="setQty(qty + 1)">+</button>
+        </div>
         <button
           class="btn btn--primary btn--block"
           :class="{ 'btn--success': added }"
@@ -372,5 +389,43 @@ watch(() => route.params.id, fetchProduct, { immediate: true });
 .btn--success {
   background: var(--success) !important;
   color: #fff !important;
+}
+
+.product-qty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.product-qty__btn {
+  width: 40px;
+  height: 40px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.product-qty__input {
+  width: 72px;
+  height: 40px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.product-qty__input::-webkit-inner-spin-button,
+.product-qty__input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
 }
 </style>

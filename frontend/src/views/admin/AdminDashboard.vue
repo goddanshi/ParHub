@@ -34,7 +34,7 @@ const admin = useAdminStore();
       <div class="admin-actions">
         <router-link to="/admin/products" class="admin-btn admin-btn--primary">+ Товар</router-link>
         <router-link to="/admin/categories" class="admin-btn admin-btn--ghost">Категории</router-link>
-        <router-link to="/admin/wheel" class="admin-btn admin-btn--ghost">Колесо</router-link>
+        <router-link to="/admin/wheel" class="admin-btn admin-btn--ghost">Рулетка</router-link>
         <router-link to="/admin/tabs" class="admin-btn admin-btn--ghost">Вкладки</router-link>
       </div>
     </div>

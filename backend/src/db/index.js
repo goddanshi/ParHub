@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { pool } from './pool.js';
 
 // --- Row mappers ---
@@ -26,11 +27,36 @@ function productFromRow(r) {
     rating: Number(r.rating),
     inStock: Boolean(r.in_stock),
     badge: r.badge || null,
+    externalId: r.external_id || null,
+  };
+}
+
+function userFromRow(r) {
+  return {
+    id: r.id,
+    firstName: r.first_name,
+    lastName: r.last_name,
+    username: r.username,
+    languageCode: r.language_code,
+    photoUrl: r.photo_url || null,
+    channelSubscribed: r.channel_subscribed,
+    firstSeen: r.first_seen,
+    lastSeen: r.last_seen,
   };
 }
 
 function orderFromRow(r) {
-  return { id: r.id, userId: r.user_id, items: r.items || [], total: Number(r.total), createdAt: r.created_at };
+  return {
+    id: r.id,
+    userId: r.user_id,
+    items: r.items || [],
+    total: Number(r.total),
+    status: r.status || 'new',
+    msOrderId: r.ms_order_id || null,
+    createdAt: r.created_at,
+    userName: r.user_name || null,
+    userUsername: r.user_username || null,
+  };
 }
 
 function ticketFromRow(r) {
@@ -229,7 +255,58 @@ export async function deleteProduct(id) {
   await pool.query('DELETE FROM products WHERE id = ?', [Number(id)]);
 }
 
+// --- Users ---
+
+export async function upsertUser(user) {
+  await pool.query(
+    `INSERT INTO users (id, first_name, last_name, username, language_code, photo_url)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       first_name    = VALUES(first_name),
+       last_name     = VALUES(last_name),
+       username      = VALUES(username),
+       language_code = VALUES(language_code),
+       photo_url     = VALUES(photo_url),
+       last_seen     = CURRENT_TIMESTAMP`,
+    [
+      String(user.id),
+      user.first_name || null,
+      user.last_name  || null,
+      user.username   || null,
+      user.language_code || null,
+      user.photo_url  || null,
+    ],
+  );
+}
+
+export async function getAllUsers() {
+  const [rows] = await pool.query('SELECT * FROM users ORDER BY last_seen DESC');
+  return rows.map(userFromRow);
+}
+
+export async function getUserById(id) {
+  const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [String(id)]);
+  return rows[0] ? userFromRow(rows[0]) : null;
+}
+
+export async function setChannelSubscribed(userId, subscribed) {
+  await pool.query(
+    'UPDATE users SET channel_subscribed = ? WHERE id = ?',
+    [subscribed ? 1 : 0, String(userId)],
+  );
+}
+
 // --- Orders ---
+
+export async function getAllOrders() {
+  const [rows] = await pool.query(`
+    SELECT o.*, u.first_name AS user_name, u.username AS user_username
+    FROM orders o
+    LEFT JOIN users u ON u.id = o.user_id
+    ORDER BY o.created_at DESC
+  `);
+  return rows.map(orderFromRow);
+}
 
 export async function getOrdersByUser(userId) {
   const [rows] = await pool.query(
@@ -240,10 +317,23 @@ export async function getOrdersByUser(userId) {
 }
 
 export async function createOrder(order) {
+  const createdAt = new Date(order.createdAt).toISOString().slice(0, 19).replace('T', ' ');
   await pool.query(
-    'INSERT INTO orders (id, user_id, items, total, created_at) VALUES (?, ?, ?, ?, ?)',
-    [order.id, order.userId, JSON.stringify(order.items), order.total, order.createdAt],
+    'INSERT INTO orders (id, user_id, items, total, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [order.id, order.userId, JSON.stringify(order.items), order.total, 'new', createdAt],
   );
+}
+
+export async function updateOrderStatus(id, status) {
+  await pool.query('UPDATE orders SET status = ? WHERE id = ?', [status, id]);
+}
+
+export async function deleteOrder(id) {
+  await pool.query('DELETE FROM orders WHERE id = ?', [id]);
+}
+
+export async function setOrderMsId(id, msOrderId) {
+  await pool.query('UPDATE orders SET ms_order_id = ? WHERE id = ?', [msOrderId, id]);
 }
 
 // --- Spin tickets ---
@@ -257,14 +347,43 @@ export async function getAvailableTickets(userId) {
 }
 
 export async function createTicket(ticket) {
+  const createdAt = new Date(ticket.createdAt).toISOString().slice(0, 19).replace('T', ' ');
   await pool.query(
     'INSERT INTO spin_tickets (id, user_id, order_id, used, created_at) VALUES (?, ?, ?, 0, ?)',
-    [ticket.id, ticket.userId, ticket.orderId, ticket.createdAt],
+    [ticket.id, ticket.userId, ticket.orderId, createdAt],
   );
 }
 
 export async function useTicket(ticketId) {
   await pool.query('UPDATE spin_tickets SET used = 1 WHERE id = ?', [ticketId]);
+}
+
+export async function getTicketByOrderId(orderId) {
+  const [rows] = await pool.query('SELECT id FROM spin_tickets WHERE order_id = ?', [orderId]);
+  return rows[0] || null;
+}
+
+// --- Spin results ---
+
+export async function createSpinResult(userId, prize) {
+  const id = crypto.randomUUID();
+  const createdAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  await pool.query(
+    'INSERT INTO spin_results (id, user_id, prize_data, created_at) VALUES (?, ?, ?, ?)',
+    [id, String(userId), JSON.stringify(prize), createdAt],
+  );
+}
+
+export async function getSpinResults(userId) {
+  const [rows] = await pool.query(
+    'SELECT * FROM spin_results WHERE user_id = ? ORDER BY created_at DESC',
+    [String(userId)],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    prize: typeof r.prize_data === 'string' ? JSON.parse(r.prize_data) : r.prize_data,
+    createdAt: r.created_at,
+  }));
 }
 
 // --- Wheel ---
@@ -362,6 +481,55 @@ export async function replaceWheelPrizes(prizes) {
   } finally {
     conn.release();
   }
+}
+
+// --- Loyalty levels ---
+
+function levelFromRow(r) {
+  return {
+    id: r.id,
+    name: r.name,
+    minAmount: Number(r.min_amount),
+    badge: r.badge,
+    perk: r.perk || null,
+    color: r.color || '#ff9000',
+    sortOrder: r.sort_order,
+  };
+}
+
+export async function getLoyaltyLevels() {
+  const [rows] = await pool.query('SELECT * FROM loyalty_levels ORDER BY min_amount ASC');
+  return rows.map(levelFromRow);
+}
+
+export async function getLoyaltyLevelById(id) {
+  const [rows] = await pool.query('SELECT * FROM loyalty_levels WHERE id = ?', [id]);
+  return rows[0] ? levelFromRow(rows[0]) : null;
+}
+
+export async function createLoyaltyLevel(data) {
+  const [result] = await pool.query(
+    'INSERT INTO loyalty_levels (name, min_amount, badge, perk, color, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+    [data.name, Number(data.minAmount) || 0, data.badge || '⭐', data.perk || null, data.color || '#ff9000', Number(data.sortOrder) || 0],
+  );
+  return getLoyaltyLevelById(result.insertId);
+}
+
+export async function updateLoyaltyLevel(id, data) {
+  await pool.query(
+    'UPDATE loyalty_levels SET name=?, min_amount=?, badge=?, perk=?, color=?, sort_order=? WHERE id=?',
+    [data.name, Number(data.minAmount) || 0, data.badge || '⭐', data.perk || null, data.color || '#ff9000', Number(data.sortOrder) || 0, id],
+  );
+  return getLoyaltyLevelById(id);
+}
+
+export async function deleteLoyaltyLevel(id) {
+  await pool.query('DELETE FROM loyalty_levels WHERE id = ?', [id]);
+}
+
+export function resolveLoyaltyLevel(levels, totalSpent) {
+  const sorted = [...levels].sort((a, b) => b.minAmount - a.minAmount);
+  return sorted.find(l => totalSpent >= l.minAmount) || null;
 }
 
 // --- Stats ---

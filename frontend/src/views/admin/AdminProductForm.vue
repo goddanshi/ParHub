@@ -32,9 +32,9 @@ function getEmptyForm() {
 }
 
 function normalizeProduct(product) {
-  const images = Array.isArray(product.images)
-    ? product.images
-    : product.image ? [product.image] : [];
+  const allImages = Array.isArray(product.images) ? product.images : [];
+  // Дополнительные фото = все кроме основного
+  const extraImages = allImages.filter(url => url !== product.image);
 
   const features = Array.isArray(product.features)
     ? product.features
@@ -48,7 +48,7 @@ function normalizeProduct(product) {
   return {
     ...getEmptyForm(),
     ...product,
-    images: images.join('\n'),
+    images: extraImages.join('\n'),
     features: features.join('\n'),
     specifications: Object.entries(specs).map(([k, v]) => `${k}: ${v}`).join('\n'),
     badge: product.badge || '',
@@ -94,7 +94,8 @@ function parseSpecs(str) {
 
 async function save() {
   saving.value = true;
-  const images = parseList(form.value.images);
+  const extraImages = parseList(form.value.images);
+  const mainImage = form.value.image || null;
   const payload = {
     name: form.value.name,
     description: form.value.description,
@@ -102,8 +103,8 @@ async function save() {
     price: Number(form.value.price),
     oldPrice: form.value.oldPrice ? Number(form.value.oldPrice) : null,
     categoryId: form.value.categoryId,
-    image: images[0] || form.value.image,
-    images: images.length ? images : [form.value.image],
+    image: mainImage,
+    images: mainImage ? [mainImage, ...extraImages] : extraImages,
     features: parseList(form.value.features),
     specifications: parseSpecs(form.value.specifications),
     rating: Number(form.value.rating),
@@ -179,8 +180,13 @@ watch(() => route.params.id ?? 'new', loadProduct, { immediate: true });
           <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
         </select>
       </div>
+      <div v-if="form.image" class="admin-form-group">
+        <label>Основное фото (из МойСклад)</label>
+        <img :src="form.image" class="admin-main-img-preview" alt="" />
+      </div>
+
       <div class="admin-form-group">
-        <label>URL фото (по одному на строку)</label>
+        <label>Дополнительные фото (по одному на строку)</label>
         <textarea v-model="form.images" class="admin-textarea" placeholder="https://..." rows="3" />
       </div>
       <div class="admin-form-group">
@@ -226,6 +232,17 @@ watch(() => route.params.id ?? 'new', loadProduct, { immediate: true });
 <style scoped>
 .admin-form-card {
   max-width: 800px;
+}
+
+.admin-main-img-preview {
+  display: block;
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #111;
+  margin-top: 6px;
 }
 
 .admin-checkbox-label {

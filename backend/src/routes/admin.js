@@ -6,11 +6,57 @@ import {
   getCategories, getCategoryById, createCategory, updateCategory, deleteCategory, categoryHasProducts,
   getProducts, getProductById, createProduct, updateProduct, deleteProduct,
   getWheelConfig, updateWheelConfig, replaceWheelPrizes, createPrize, updatePrize, deletePrize,
+  getAllOrders, updateOrderStatus, setOrderMsId, deleteOrder,
+  createTicket, getTicketByOrderId,
+  getAllUsers,
+  getLoyaltyLevels, createLoyaltyLevel, updateLoyaltyLevel, deleteLoyaltyLevel,
   getStats,
 } from '../db/index.js';
+import { createCustomerOrder } from '../services/moysklad.js';
+import { sendBotMessage } from '../utils/telegram.js';
+import { ProxyAgent, fetch as undiciFetch } from 'undici';
+
+function tgFetch(url, options = {}) {
+  const proxyUrl = process.env.TELEGRAM_PROXY;
+  if (proxyUrl) return undiciFetch(url, { ...options, dispatcher: new ProxyAgent(proxyUrl) });
+  return fetch(url, options);
+}
 
 const router = Router();
+
+// Debug (без авторизации — временно для диагностики)
+router.get('/debug/channel/:userId', async (req, res) => {
+  const token = process.env.BOT_TOKEN;
+  const channel = process.env.REQUIRED_CHANNEL;
+  if (!token || !channel) return res.json({ error: 'BOT_TOKEN или REQUIRED_CHANNEL не заданы', token: !!token, channel });
+
+  const url = `https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(channel)}&user_id=${req.params.userId}`;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const tgRes = await tgFetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    const data = await tgRes.json();
+    res.json({ channel, userId: req.params.userId, telegramResponse: data });
+  } catch (e) {
+    res.json({ error: e.message, hint: 'Сервер не может достучаться до api.telegram.org', channel, userId: req.params.userId });
+  }
+});
+
 router.use(adminAuth);
+
+const MS_BASE = 'https://api.moysklad.ru';
+function proxyUrl(url) {
+  if (!url || !url.startsWith(MS_BASE)) return url;
+  return `/api/ms-image?href=${encodeURIComponent(url)}`;
+}
+function transformProduct(p) {
+  return {
+    ...p,
+    image: proxyUrl(p.image),
+    images: Array.isArray(p.images) ? p.images.map(u => (typeof u === 'string' ? proxyUrl(u) : u)) : p.images,
+  };
+}
 
 // --- Tabs ---
 
@@ -80,13 +126,13 @@ router.delete('/categories/:id', async (req, res) => {
 // --- Products ---
 
 router.get('/products', async (_req, res) => {
-  res.json(await getProducts());
+  res.json((await getProducts()).map(transformProduct));
 });
 
 router.get('/products/:id', async (req, res) => {
   const product = await getProductById(req.params.id);
   if (!product) return res.status(404).json({ error: 'Product not found' });
-  res.json(product);
+  res.json(transformProduct(product));
 });
 
 router.post('/products', async (req, res) => {
@@ -111,7 +157,11 @@ router.delete('/products/:id', async (req, res) => {
 // --- Wheel ---
 
 router.get('/wheel', async (_req, res) => {
-  res.json(await getWheelConfig());
+  const config = await getWheelConfig();
+  if (config?.prizes) {
+    config.prizes = config.prizes.map(p => ({ ...p, image: proxyUrl(p.image) }));
+  }
+  res.json(config);
 });
 
 router.put('/wheel', async (req, res) => {
@@ -150,6 +200,131 @@ router.delete('/wheel/prizes/:id', async (req, res) => {
 
 router.get('/stats', async (_req, res) => {
   res.json(await getStats());
+});
+
+// --- Orders ---
+
+router.get('/orders', async (_req, res) => {
+  const orders = await getAllOrders();
+  res.json(orders.map(o => ({
+    ...o,
+    items: o.items.map(item => ({ ...item, image: proxyUrl(item.image) })),
+  })));
+});
+
+router.put('/orders/:id/status', async (req, res) => {
+  const { status } = req.body;
+  const allowed = ['new', 'confirmed', 'completed', 'cancelled'];
+  if (!allowed.includes(status)) return res.status(400).json({ error: 'Неверный статус' });
+  await updateOrderStatus(req.params.id, status);
+
+  if (status === 'confirmed') {
+    const orders = await getAllOrders();
+    const order = orders.find(o => o.id === req.params.id);
+    const wheelConfig = await getWheelConfig();
+    if (order && wheelConfig?.enabled && order.total >= wheelConfig.minPurchaseAmount) {
+      const existing = await getTicketByOrderId(order.id);
+      if (!existing) {
+        const createdAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        await createTicket({ id: crypto.randomUUID(), userId: order.userId, orderId: order.id, createdAt });
+      }
+    }
+  }
+
+  res.json({ ok: true });
+});
+
+router.delete('/orders/:id', async (req, res) => {
+  await deleteOrder(req.params.id);
+  res.json({ ok: true });
+});
+
+router.post('/orders/:id/send-to-ms', async (req, res) => {
+  if (!process.env.MOYSKLAD_TOKEN) return res.status(400).json({ error: 'MOYSKLAD_TOKEN не задан' });
+  const orders = await getAllOrders();
+  const order = orders.find(o => o.id === req.params.id);
+  if (!order) return res.status(404).json({ error: 'Заказ не найден' });
+  try {
+    const msId = await createCustomerOrder(order, { id: order.userId, username: order.userUsername, first_name: order.userName });
+    await setOrderMsId(order.id, msId);
+    res.json({ ok: true, msOrderId: msId });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// --- Users ---
+
+router.get('/users', async (_req, res) => {
+  res.json(await getAllUsers());
+});
+
+router.post('/users/:id/grant-ticket', async (req, res) => {
+  const userId = req.params.id;
+  const count = Math.max(1, Math.min(100, Number(req.body.count) || 1));
+  for (let i = 0; i < count; i++) {
+    const createdAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    await createTicket({ id: crypto.randomUUID(), userId, orderId: null, createdAt });
+  }
+  res.json({ ok: true, granted: count });
+});
+
+// --- Loyalty levels ---
+
+router.get('/levels', async (_req, res) => {
+  res.json(await getLoyaltyLevels());
+});
+
+router.post('/levels', async (req, res) => {
+  const { name, minAmount, badge, perk, color, sortOrder } = req.body;
+  if (!name) return res.status(400).json({ error: 'name обязателен' });
+  res.status(201).json(await createLoyaltyLevel({ name, minAmount, badge, perk, color, sortOrder }));
+});
+
+router.put('/levels/:id', async (req, res) => {
+  const level = await updateLoyaltyLevel(Number(req.params.id), req.body);
+  if (!level) return res.status(404).json({ error: 'Уровень не найден' });
+  res.json(level);
+});
+
+router.delete('/levels/:id', async (req, res) => {
+  await deleteLoyaltyLevel(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+// --- Broadcast ---
+
+router.get('/broadcast/users-count', async (_req, res) => {
+  const users = await getAllUsers();
+  res.json({ count: users.length });
+});
+
+router.post('/broadcast', async (req, res) => {
+  const { text, imageUrl, buttonLabel, buttonUrl } = req.body;
+  if (!text?.trim()) return res.status(400).json({ error: 'Текст сообщения обязателен' });
+
+  const users = await getAllUsers();
+  if (!users.length) return res.json({ total: 0, sent: 0, failed: 0 });
+
+  const replyMarkup = buttonLabel && buttonUrl
+    ? { inline_keyboard: [[{ text: buttonLabel, url: buttonUrl }]] }
+    : undefined;
+
+  let sent = 0;
+  let failed = 0;
+
+  for (const user of users) {
+    try {
+      await sendBotMessage(user.id, text.trim(), { imageUrl: imageUrl || undefined, replyMarkup });
+      sent++;
+    } catch {
+      failed++;
+    }
+    // Telegram: max ~30 msg/s — safe delay
+    await new Promise(r => setTimeout(r, 50));
+  }
+
+  res.json({ total: users.length, sent, failed });
 });
 
 export default router;

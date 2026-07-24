@@ -14,7 +14,7 @@ export const useTabsStore = defineStore('tabs', () => {
       tabs.value = [
         { id: 'home', label: 'Главная', icon: 'home', path: '/' },
         { id: 'catalog', label: 'Каталог', icon: 'grid', path: '/catalog' },
-        { id: 'wheel', label: 'Колесо', icon: 'wheel', path: '/wheel' },
+        { id: 'wheel', label: 'Рулетка', icon: 'wheel', path: '/wheel' },
         { id: 'profile', label: 'Профиль', icon: 'user', path: '/profile' },
       ];
     } finally {

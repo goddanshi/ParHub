@@ -8,6 +8,10 @@ import AdminCategories from '@/views/admin/AdminCategories.vue';
 import AdminProducts from '@/views/admin/AdminProducts.vue';
 import AdminProductForm from '@/views/admin/AdminProductForm.vue';
 import AdminWheel from '@/views/admin/AdminWheel.vue';
+import AdminOrders from '@/views/admin/AdminOrders.vue';
+import AdminBroadcast from '@/views/admin/AdminBroadcast.vue';
+import AdminLevels from '@/views/admin/AdminLevels.vue';
+import AdminUsers from '@/views/admin/AdminUsers.vue';
 
 const shopRoutes = [
   { path: '/', name: 'home', component: () => import('@/views/HomeView.vue') },
@@ -16,6 +20,8 @@ const shopRoutes = [
   { path: '/cart', name: 'cart', component: () => import('@/views/CartView.vue') },
   { path: '/wheel', name: 'wheel', component: () => import('@/views/WheelView.vue') },
   { path: '/profile', name: 'profile', component: () => import('@/views/ProfileView.vue') },
+  { path: '/orders', name: 'orders', component: () => import('@/views/OrdersView.vue') },
+  { path: '/prizes', name: 'prizes', component: () => import('@/views/MyPrizesView.vue') },
 ];
 
 const adminRoutes = [
@@ -32,6 +38,10 @@ const adminRoutes = [
       { path: 'products/:id', name: 'admin-product-edit', component: AdminProductForm, props: true },
       { path: 'products', name: 'admin-products', component: AdminProducts },
       { path: 'wheel', name: 'admin-wheel', component: AdminWheel },
+      { path: 'orders', name: 'admin-orders', component: AdminOrders },
+      { path: 'broadcast', name: 'admin-broadcast', component: AdminBroadcast },
+      { path: 'levels', name: 'admin-levels', component: AdminLevels },
+      { path: 'users', name: 'admin-users', component: AdminUsers },
     ],
   },
 ];

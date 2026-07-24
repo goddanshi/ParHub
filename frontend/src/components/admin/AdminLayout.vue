@@ -10,10 +10,12 @@ const sidebarOpen = ref(false);
 
 const nav = [
   { path: '/admin', label: 'Дашборд', icon: '📊' },
-  { path: '/admin/tabs', label: 'Вкладки', icon: '📑' },
-  { path: '/admin/categories', label: 'Категории', icon: '📁' },
+  { path: '/admin/orders', label: 'Заявки', icon: '📋' },
   { path: '/admin/products', label: 'Товары', icon: '📦' },
-  { path: '/admin/wheel', label: 'Колесо', icon: '🎡' },
+  { path: '/admin/wheel', label: 'Рулетка', icon: '🎡' },
+  { path: '/admin/levels', label: 'Уровни', icon: '🏆' },
+  { path: '/admin/broadcast', label: 'Рассылка', icon: '📣' },
+  { path: '/admin/users', label: 'Пользователи', icon: '👥' },
 ];
 
 function toggleSidebar() {
