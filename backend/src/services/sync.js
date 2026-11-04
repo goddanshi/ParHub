@@ -1,12 +1,16 @@
 import { pool } from '../db/pool.js';
-import { fetchFolders, fetchProducts, fetchStockMap, fetchByHref, fetchProductStock, fetchProductImages } from './moysklad.js';
+import { fetchFolders, fetchProducts, fetchStockMap, fetchByHref, fetchProductStock, fetchProductImages, getMoySkladState, MoySkladBlockedError } from './moysklad.js';
+
+// Сколько запросов /images разрешено за один полный прогон; остальные товары
+// получат картинки на следующих прогонах (у них image остаётся NULL).
+const MAX_IMAGE_REQUESTS = Number(process.env.SYNC_MAX_IMAGE_REQUESTS) || 150;
 
 // Последний результат синхронизации (хранится в памяти)
 let lastSyncResult = null;
 let syncRunning = false;
 
 export function getSyncStatus() {
-  return { running: syncRunning, last: lastSyncResult };
+  return { running: syncRunning, last: lastSyncResult, moysklad: getMoySkladState() };
 }
 
 // Извлечь UUID из href МойСклад
@@ -32,6 +36,7 @@ export async function runSync() {
   let productsSynced = 0;
   let imagesTotal = 0;
   let imagesFound = 0;
+  let imageRequests = 0;
   let errors = [];
 
   try {
@@ -60,6 +65,10 @@ export async function runSync() {
     // 3. Товары
     const products = await fetchProducts();
 
+    // Уже сохранённые картинки — одним запросом, а не по запросу на товар
+    const [imgRows] = await pool.query('SELECT external_id, image FROM products WHERE image IS NOT NULL');
+    const existingImages = new Map(imgRows.map((r) => [r.external_id, r.image]));
+
     for (const p of products) {
       if (p.archived) continue;
 
@@ -82,18 +91,21 @@ export async function runSync() {
 
       if (imagesSize > 0) {
         imagesTotal++;
-        const [[existing]] = await pool.query(
-          'SELECT image FROM products WHERE external_id = ?',
-          [externalId],
-        );
-        if (existing?.image) {
+        const existingImage = existingImages.get(externalId);
+        if (existingImage) {
           // Уже есть URL — оставляем
-          imagePath = existing.image;
+          imagePath = existingImage;
           imagesFound++;
-        } else {
-          const imgs = await fetchProductImages(productHref);
-          imagePath = imgs.length > 0 ? imageUrl(imgs[0]) : null;
-          if (imagePath) imagesFound++;
+        } else if (imageRequests < MAX_IMAGE_REQUESTS) {
+          imageRequests++;
+          try {
+            const imgs = await fetchProductImages(productHref);
+            imagePath = imgs.length > 0 ? imageUrl(imgs[0]) : null;
+            if (imagePath) imagesFound++;
+          } catch (err) {
+            if (err instanceof MoySkladBlockedError) throw err;
+            errors.push(`Изображения ${p.name}: ${err.message}`);
+          }
         }
       }
 
@@ -177,8 +189,13 @@ async function upsertProduct(p) {
 
   let imagePath = null;
   if ((p.images?.meta?.size ?? 0) > 0) {
-    const imgs = await fetchProductImages(p.meta.href.split('?')[0]);
-    imagePath = imgs.length > 0 ? imageUrl(imgs[0]) : null;
+    try {
+      const imgs = await fetchProductImages(p.meta.href.split('?')[0]);
+      imagePath = imgs.length > 0 ? imageUrl(imgs[0]) : null;
+    } catch (err) {
+      if (err instanceof MoySkladBlockedError) throw err;
+      console.error(`[webhook] Изображения ${p.name}:`, err.message);
+    }
     if (!imagePath) {
       const [[existing]] = await pool.query(
         'SELECT image FROM products WHERE external_id = ?', [externalId],

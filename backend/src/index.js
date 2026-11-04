@@ -17,6 +17,13 @@ import syncRoutes from './routes/sync.js';
 import webhookRoutes from './routes/webhook.js';
 import telegramWebhookRoutes from './routes/telegramWebhook.js';
 
+// "*/N" в поле минут работает только для N < 60, поэтому большие интервалы переводим в часы
+function cronFromMinutes(min) {
+  if (min < 60) return `*/${min} * * * *`;
+  const hours = Math.round(min / 60);
+  return hours >= 24 ? '0 3 * * *' : `0 */${hours} * * *`;
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -50,9 +57,9 @@ initDb()
     // Крон-синхронизация с МойСклад
     if (process.env.MOYSKLAD_TOKEN) {
       const intervalMin = Math.max(5, Number(process.env.SYNC_INTERVAL_MINUTES) || 30);
-      const cronExpr = `*/${intervalMin} * * * *`;
+      const cronExpr = cronFromMinutes(intervalMin);
       cron.schedule(cronExpr, () => runSync());
-      console.log(`МойСклад sync scheduled every ${intervalMin} min (fallback cron)`);
+      console.log(`МойСклад sync scheduled: "${cronExpr}" (SYNC_INTERVAL_MINUTES=${intervalMin}, fallback cron)`);
 
       // Первая полная синхронизация через 10 секунд после старта
       setTimeout(() => runSync(), 10_000);
