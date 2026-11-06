@@ -93,7 +93,22 @@ PHPMYADMIN_PORT=8080
 | POST | `/api/orders/checkout` | Оформление заказа |
 | GET | `/api/wheel/config` | Настройки колеса |
 | POST | `/api/wheel/spin` | Прокрутка (нужен билет) |
+| GET | `/api/export/products` | Экспорт каталога (ключ `EXPORT_API_KEY`) |
+| GET | `/api/export/categories` | Экспорт категорий (ключ `EXPORT_API_KEY`) |
 | * | `/api/admin/*` | Админ API (Bearer token) |
+
+## Экспорт каталога для других сервисов
+
+Чтобы внешние сервисы не ходили в API МойСклад напрямую (лимиты), они могут забирать каталог из этого бэкенда:
+
+```bash
+curl -H "X-API-Key: $EXPORT_API_KEY" https://parhub-shop.ru/api/export/products
+```
+
+- Ключ задаётся переменной `EXPORT_API_KEY`, передаётся в заголовке `X-API-Key` (или query-параметром `?api_key=`). Если ключ не задан — эндпоинты отвечают `503`.
+- Ответ: `{ "total": N, "items": [...] }`. У каждого товара есть `externalId` — UUID товара в МойСклад.
+- Ссылки на изображения указывают на наш кэширующий прокси (`/api/ms-image`), а не на api.moysklad.ru.
+- Фильтры: `?category=<id>`, `?search=<строка>`, `?inStock=true`.
 
 ## Колесо фортуны
 

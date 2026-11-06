@@ -16,6 +16,7 @@ import adminRoutes from './routes/admin.js';
 import syncRoutes from './routes/sync.js';
 import webhookRoutes from './routes/webhook.js';
 import telegramWebhookRoutes from './routes/telegramWebhook.js';
+import exportRoutes from './routes/export.js';
 
 // "*/N" в поле минут работает только для N < 60, поэтому большие интервалы переводим в часы
 function cronFromMinutes(min) {
@@ -44,6 +45,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/admin/sync', syncRoutes);
 app.use('/api/webhook/moysklad', webhookRoutes);
 app.use('/api/webhook/telegram', telegramWebhookRoutes);
+app.use('/api/export', exportRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err.message);
